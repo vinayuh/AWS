@@ -1,114 +1,117 @@
-# Amazon Pinpoint Using AI & ML in Customer Engagement
+# Amazon Pinpoint 2-way SMS & recommendations
 # author: vinayuj@
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "Pinpoint 2-way SMS & recommendations"
 
 Parameters:
+
   CodeS3Bucket:
     Type: String
     Default: pinpointreinventaiml-code
     Description: Specify S3 bucket that contains Lambda code.
   PinpointProjectId:
     Type: String
-    Default: enter-pinpoint-projectid
+    Default: Project ID here
     Description: Specify the Pinpoint project ID that you created earlier.
   BotAlias:
     Type: String
-    Default: enter-BotAlias
+    Default: Bot Alias here
     Description: Specify the Bot Alias from Lex that you created earlier.
   BotId:
     Type: String
-    Default: enter-BotId
+    Default: Bot ID here
     Description: Specify the BotID from Lex that you created earlier.
   OriginationNumber:
     Type: String
     Default: +1214xxxxxx2
-    Description: Specify the origination phone number that you created earlier.
-
+    Description: Specify the origination phone number that you created earlier.  
 
 Resources:
-    
-    IAMManagedPolicy:
-        Type: "AWS::IAM::ManagedPolicy"
-        Properties:
-            ManagedPolicyName: "AWSLambdaBasicExecutionRole-38a905e3-5ef9-4810-baf0-d52493083100"
-            Path: "/service-role/"
-            PolicyDocument: !Sub |
-                {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": "logs:CreateLogGroup",
-                            "Resource": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
-                        },
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "logs:CreateLogStream",
-                                "logs:PutLogEvents"
-                            ],
-                            "Resource": [
-                                "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/RE_Order_Validation*"
-                            ]
-                        }
-                    ]
-                }
 
-    IAMManagedPolicy2:
-        Type: "AWS::IAM::ManagedPolicy"
-        Properties:
-            ManagedPolicyName: "AWSLambdaBasicExecutionRole-4f487b0d-a6ff-4d6d-b797-e85da86ec4d0"
-            Path: "/service-role/"
-            PolicyDocument: !Sub |
-                {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": "logs:CreateLogGroup",
-                            "Resource": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
-                        },
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "logs:CreateLogStream",
-                                "logs:PutLogEvents"
-                            ],
-                            "Resource": [
-                                "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/LexIntegration*"
-                            ]
-                        }
-                    ]
-                }
-
-    IAMRole:
+    LambdaOrderValidationRole:
         Type: "AWS::IAM::Role"
         Properties:
             Path: "/service-role/"
-            RoleName: "RE_Order_Validation-role-19dg4id5"
             AssumeRolePolicyDocument: "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
-            MaxSessionDuration: 3600
-            ManagedPolicyArns: 
-              - !Ref IAMManagedPolicy
-              - "arn:aws:iam::aws:policy/AWSLambda_FullAccess"
 
-    IAMRole2:
+            Policies:
+                -
+                    PolicyName: "LambdaOrderValidationPolicy"
+                    PolicyDocument: 
+                        {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Sid": "PinpointMessaging",
+                                    "Effect": "Allow",
+                                    "Action": "mobiletargeting:*",
+                                    "Resource": !Sub "arn:aws:mobiletargeting:*:${AWS::AccountId}:apps/*"
+                                },
+                                {
+                                    "Sid": "DynamoTable",
+                                    "Effect": "Allow",
+                                    "Action": "dynamodb:GetItem",
+                                    "Resource": !GetAtt DynamoDBTable.Arn
+                                }
+                                ]
+                        }
+
+    LambdaLexIntegrationRole:
         Type: "AWS::IAM::Role"
         Properties:
             Path: "/service-role/"
-            RoleName: "LexIntegration-role-mh85nh60"
             AssumeRolePolicyDocument: "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
-            MaxSessionDuration: 3600
-            ManagedPolicyArns: 
-              - !Ref IAMManagedPolicy2
-              - "arn:aws:iam::aws:policy/AmazonLexFullAccess"
+
+            Policies:
+                -
+                    PolicyName: "LambdaLexIntegrationPolicy"
+                    PolicyDocument: 
+                        {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Sid": "Logs",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogStream",
+                                        "logs:CreateLogGroup",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:logs:*:*:*"
+                                    ]
+                                },
+                                {
+                                    "Sid": "Pinpoint",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "mobiletargeting:SendMessages"
+                                    ],
+                                    "Resource": [
+                                        !Sub "arn:aws:mobiletargeting:*:${AWS::AccountId}:apps/*"
+                                    ]
+                                },
+                                {
+                                    "Sid": "Lex",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "lex:PostContent",
+                                        "lex:PostText",
+                                        "lex:RecognizeText"
+                                    ],
+                                    "Resource": [
+                                        !Sub "arn:aws:lex:${AWS::Region}:${AWS::AccountId}:bot:OrderStatus"
+                                    ]
+                                }
+                            ]
+                        }
+
+
+#DynamoDB Table
 
     DynamoDBTable:
         Type: "AWS::DynamoDB::Table"
-        UpdateReplacePolicy: Retain
-        DeletionPolicy: Retain
         Properties:
             AttributeDefinitions: 
               - 
@@ -132,11 +135,15 @@ Resources:
             RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable"
             ScalableDimension: "dynamodb:table:WriteCapacityUnits"
             ServiceNamespace: "dynamodb"
+            SuspendedState: 
+                DynamicScalingInSuspended: false
+                DynamicScalingOutSuspended: false
+                ScheduledScalingSuspended: false
+
+#Lambda Functions
 
     LambdaFunctionLexIntegration:
         Type: "AWS::Lambda::Function"
-        DependsOn:
-            - IAMRole2
         Properties:
             Environment: 
                 Variables: 
@@ -145,7 +152,6 @@ Resources:
                     OriginationNumber: !Ref OriginationNumber
                     BotId: !Ref BotId
                     Region: !Ref AWS::Region
-            FunctionName: "LexIntegration"
             Handler: "index.handler"
             Architectures: 
               - "x86_64"
@@ -153,7 +159,7 @@ Resources:
                 S3Bucket:
                     Ref: CodeS3Bucket
                 S3Key: "lambda/LexIntegration.zip"
-            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/LexIntegration-role-mh85nh60"
+            Role: !GetAtt LambdaLexIntegrationRole.Arn
             Runtime: "nodejs16.x"
             Timeout: 60
             TracingConfig: 
@@ -161,13 +167,10 @@ Resources:
 
     LambdaFunctionOrderValidation:
         Type: "AWS::Lambda::Function"
-        DependsOn:
-            - IAMRole
         Properties:
             Environment: 
                 Variables: 
                     applicationId: !Ref PinpointProjectId
-            FunctionName: "RE_Order_Validation"
             Handler: "lambda_function.lambda_handler"
             Architectures: 
               - "x86_64"
@@ -175,16 +178,19 @@ Resources:
                 S3Bucket:
                     Ref: CodeS3Bucket
                 S3Key: "lambda/RE_Order_Validation.zip"
-            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/RE_Order_Validation-role-19dg4id5"
+            Role: !GetAtt LambdaOrderValidationRole.Arn 
             Runtime: "python3.9"
             Timeout: 60
             TracingConfig: 
                 Mode: "PassThrough"
 
+#SNS Topic
+
     SNSTopicTwoWaySMS:
         Type: "AWS::SNS::Topic"
         Properties:
-            TopicName: "LexPinpointIntegrationDemo"
+            DisplayName: "LexPinpointIntegrationDemo"
+            KmsMasterKeyId: alias/aws/sns
 
     SNSTopicPolicy:
         Type: "AWS::SNS::TopicPolicy"
